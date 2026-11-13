@@ -84,7 +84,9 @@ async function main() {
     for (const bill of bills) {
       if (Object.hasOwn(state, key(bill))) continue;
       socket ??= await connectWhatsApp();
-      const result = await socket.sendMessage(socket.user.id, { text: message(parameters(bill, bills)) });
+      const { jidNormalizedUser } = await import('baileys');
+      const recipient = jidNormalizedUser(socket.user.id);
+      const result = await socket.sendMessage(recipient, { text: message(parameters(bill, bills)) });
       if (!result?.key?.id) throw new Error('O WhatsApp não confirmou o envio.');
       state[key(bill)] = 'aceito';
       saveState(state);
