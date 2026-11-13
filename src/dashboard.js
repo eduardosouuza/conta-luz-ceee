@@ -59,6 +59,7 @@ if (process.argv.includes('--export-demo')) {
   const fs = require('node:fs');
   fs.mkdirSync('dist', { recursive: true });
   fs.writeFileSync('dist/index.html', render(demoRecords, true));
+  fs.copyFileSync(require('node:path').join(__dirname, '..', 'privacidade.html'), 'dist/privacidade.html');
 } else {
 http.createServer((req, res) => {
   if (req.method !== 'GET' || req.url !== '/') {
