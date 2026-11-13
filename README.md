@@ -81,12 +81,18 @@ No Node.js 22 ou superior, rode `npm run web` e abra `http://127.0.0.1:3000`. O 
 
 O painel escuta apenas no computador. Para usar com dados reais pelo celular, sirva a porta local por um proxy HTTPS privado com autenticação, acessível ao celular. O computador precisa ficar ligado enquanto servir a página. Para demonstrar o projeto no portfólio, rode `npm run web -- --demo`. O modo demonstração usa três registros fictícios. Mantenha `dados/`, PDFs, tokens e `.env` fora do repositório público.
 
-O arquivo `src/alerts.js` compara cada fatura com o mês anterior da mesma unidade e monta o texto. O módulo `src/whatsapp.js` conecta o Baileys como aparelho vinculado. O aviso vai para a conversa com você mesmo. A sessão fica em `dados/whatsapp-session/` e deve permanecer privada.
+O arquivo `src/alerts.js` compara a fatura com o mês anterior da mesma unidade, monta os parâmetros e envia um template pela [API oficial do WhatsApp Business](https://developers.facebook.com/documentation/business-messaging/whatsapp/overview). O registro local dos avisos usa unidade consumidora e referência como chave. Uma resposta aceita pela API é gravada no disco, permitindo que a próxima execução pule o aviso já registrado. Uma interrupção entre o aceite da Meta e a gravação local pode causar reenvio. O aceite da API indica que a Meta recebeu a solicitação de envio.
 
-1. Rode `npm run alerts -- --pair` para exibir o QR. No WhatsApp, abra **Aparelhos conectados → Conectar um aparelho**. Também é possível passar o telefone com DDI e DDD após `--pair` para gerar um código.
-2. Rode `npm run alerts -- --preview` para conferir o texto e `npm run alerts -- --init` uma vez para registrar as faturas existentes como histórico.
-3. Execute `powershell -NoProfile -File scripts/sync-and-notify.ps1` para sincronizar e enviar avisos novos. Agende o script diariamente no Windows. A máquina precisa estar disponível, e o OAuth do Gmail em modo de teste exige reautorização após a expiração do token.
+1. Rode `npm run alerts -- --preview` para ver os dados que iriam na mensagem.
+2. Configure o número remetente no WhatsApp Business, adicione seu número como destinatário e crie um template de utilidade em português do Brasil. Use cinco parâmetros posicionais no corpo, como no exemplo abaixo. Aguarde a aprovação da Meta.
+3. Copie `.env.example` para `.env`. Preencha a versão Graph API escolhida no console da Meta, o ID do telefone remetente, o token, o telefone destinatário com código de país e o nome do template.
+4. Rode `npm run alerts -- --init` uma vez com a base atual. Isso marca as faturas existentes como histórico.
+5. Depois de configurar o template e as credenciais, execute `powershell -NoProfile -File scripts/sync-and-notify.ps1`. Para verificar diariamente, agende esse script no Agendador de Tarefas do Windows usando o caminho absoluto. Ele só tenta avisar após uma sincronização bem-sucedida. O token OAuth do Gmail em modo de teste precisa ser renovado a cada sete dias.
 
-Os avisos usam a unidade e o mês como chave. Após o envio, a chave é gravada em `dados/avisos-whatsapp.json`. Uma interrupção entre o envio e a gravação pode causar reenvio. O Baileys é uma biblioteca não oficial de WhatsApp Web, então mudanças no WhatsApp podem exigir atualização.
-
-Na Vercel, `npm run build` gera em `dist/` a demonstração pública com dados fictícios. A sincronização e a sessão WhatsApp ficam no computador.
+```text
+Sua fatura de energia de {{1}} está disponível.
+Valor total: {{2}}
+Consumo: {{3}}
+Variação de valor em relação ao mês anterior: {{4}}
+Variação de consumo em relação ao mês anterior: {{5}}
+```
