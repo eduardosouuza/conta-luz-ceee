@@ -2,6 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DADOS_DIR, loadAll, ensureDir, isBill } = require('./store');
 
+const { connectWhatsApp } = require('./whatsapp');
+
 const statePath = path.join(DADOS_DIR, 'avisos-whatsapp.json');
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const key = (bill) => bill.uc + '|' + bill.referencia;
@@ -26,33 +28,15 @@ function parameters(bill, bills) {
   ];
 }
 
-async function sendTemplate(values) {
-  const { WA_API_VERSION, WA_PHONE_ID, WA_TOKEN, WA_TO, WA_TEMPLATE } = process.env;
-  if (!/^v\d+\.\d+$/.test(WA_API_VERSION || '') || !/^\d+$/.test(WA_PHONE_ID || '') ||
-      !/^\d{8,15}$/.test(WA_TO || '') || !WA_TOKEN || !WA_TEMPLATE) {
-    throw new Error('Preencha as variáveis WA_* no arquivo .env.');
-  }
-  const response = await fetch(`https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + WA_TOKEN, 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(30_000),
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: WA_TO,
-      type: 'template',
-      template: {
-        name: WA_TEMPLATE,
-        language: { code: 'pt_BR' },
-        components: [{ type: 'body', parameters: values.map((text) => ({ type: 'text', text })) }],
-      },
-    }),
-  });
-  const result = await response.json();
-  if (!response.ok || !result.messages?.[0]?.id) {
-    throw new Error(`Meta não aceitou o aviso (HTTP ${response.status}, código ${result.error?.code ?? 'indisponível'}).`);
-  }
+function message(values) {
+  const [month, value, usage, valueDelta, usageDelta] = values;
+  return [
+    'Conta de luz · ' + month,
+    'Valor: ' + value,
+    'Consumo: ' + usage,
+    'Variação em relação ao mês anterior: ' + valueDelta + ' e ' + usageDelta,
+  ].join('\n');
 }
-
 function saveState(state) {
   const temporary = statePath + '.tmp';
   fs.writeFileSync(temporary, JSON.stringify(state, null, 2));
@@ -64,16 +48,33 @@ async function main() {
   const bills = loadAll().filter(isBill).sort((a, b) => a.referencia.localeCompare(b.referencia));
   if (mode === '--preview') {
     const latest = bills.at(-1);
-    console.log(latest ? parameters(latest, bills).join(' | ') : 'Nenhuma fatura disponível.');
+    console.log(latest ? message(parameters(latest, bills)) : 'Nenhuma fatura disponível.');
+    return;
+  }
+  if (mode === '--pair') {
+    const phone = process.argv[3];
+    if (phone && !/^\d{8,15}$/.test(phone)) throw new Error('Informe o telefone com DDI e DDD, somente dígitos.');
+    const socket = await connectWhatsApp({ pair: true, phone, onCode: (code) => console.log('Código de pareamento: ' + code) });
+    socket.end();
+    console.log('WhatsApp pareado.');
     return;
   }
   if (mode !== '--init' && mode !== '--send') throw new Error('Use --preview, --init ou --send.');
   ensureDir(DADOS_DIR);
   const lockPath = statePath + '.lock';
   const lock = fs.openSync(lockPath, 'wx');
+  let socket;
   try {
     if (!fs.existsSync(statePath)) {
-      if (mode !== '--init') throw new Error('Execute npm run alerts -- --init primeiro.');
+      if (mode === '--pair') {
+    const phone = process.argv[3];
+    if (phone && !/^\d{8,15}$/.test(phone)) throw new Error('Informe o telefone com DDI e DDD, somente dígitos.');
+    const socket = await connectWhatsApp({ pair: true, phone, onCode: (code) => console.log('Código de pareamento: ' + code) });
+    socket.end();
+    console.log('WhatsApp pareado.');
+    return;
+  }
+  if (mode !== '--init') throw new Error('Execute npm run alerts -- --init primeiro.');
       saveState(Object.fromEntries(bills.map((bill) => [key(bill), 'historico'])));
       console.log('Histórico registrado. Próximas faturas ficam disponíveis para envio.');
       return;
@@ -82,12 +83,15 @@ async function main() {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     for (const bill of bills) {
       if (Object.hasOwn(state, key(bill))) continue;
-      await sendTemplate(parameters(bill, bills));
+      socket ??= await connectWhatsApp();
+      const result = await socket.sendMessage(socket.user.id, { text: message(parameters(bill, bills)) });
+      if (!result?.key?.id) throw new Error('O WhatsApp não confirmou o envio.');
       state[key(bill)] = 'aceito';
       saveState(state);
-      console.log('Aviso aceito pela Meta para ' + bill.referencia);
+      console.log('Aviso enviado para ' + bill.referencia);
     }
   } finally {
+    socket?.end();
     fs.closeSync(lock);
     fs.unlinkSync(lockPath);
   }
