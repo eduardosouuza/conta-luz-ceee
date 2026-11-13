@@ -1,0 +1,21 @@
+{
+  "name": "conta-luz-ceee",
+  "version": "1.0.0",
+  "description": "Automação para baixar, extrair e resumir contas de luz (CEEE Equatorial) do Gmail",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "auth": "node src/auth.js",
+    "sync": "node src/index.js",
+    "start": "node src/index.js",
+    "report": "node src/report.js",
+    "web": "node src/dashboard.js",
+    "build": "node src/dashboard.js --export-demo",
+    "alerts": "node src/alerts.js"
+  },
+  "dependencies": {
+    "@google-cloud/local-auth": "^3.0.1",
+    "googleapis": "^144.0.0",
+    "pdf-parse": "^1.1.1"
+  }
+}

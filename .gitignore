@@ -1,0 +1,12 @@
+node_modules/
+credentials.json
+token.json
+.env
+dist/
+.vercel/
+anexos/*
+!anexos/.gitkeep
+dados/*
+!dados/.gitkeep
+.DS_Store
+npm-debug.log*
